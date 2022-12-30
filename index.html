@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<!--    <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser-arcade-physics.min.js"></script>-->
+    <style>
+        body, html {
+          margin: 0;
+          padding: 0;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+          }
+
+        #divControl {
+            position: absolute;
+            padding: 10px;
+            left: 0px;
+            top: 0px;
+            width: 200px;
+            height: auto;
+            background-color: #000000;
+            color: #ffffff;
+        }
+
+        input[type=range] {
+            width: 95%;
+        }
+    </style>
+
+</head>
+<body>
+<div id="divControl">
+    <h2>Swarm Parameters</h2>
+    <div>
+        <label for="numAgents">Number of Agents<br></label>
+        <input type="range" id="numAgents" name="numAgents"
+               min="1" max="500" value="200" step="10" style="accent-color:yellow">
+    </div>
+    <div>
+        <label for="turningSpeed">Turning Speed<br></label>
+        <input type="range" id="turningSpeed" name="turningSpeed"
+             min="0" max="1" value="0.5" step="0.01" style="accent-color:grey">
+    </div>
+
+    <h2>Agent Behaviour</h2>
+    <div>
+        <label for="attractionZone">Attraction Zone Radius<br></label>
+        <input type="range" id="attractionZone" name="attractionZone"
+             min="0" max="200" value="60" step="1" style="accent-color:blue">
+    </div>
+
+    <div>
+        <label for="orientationZone">Orientation Zone Radius<br></label>
+        <input type="range" id="orientationZone" name="orientationZone"
+             min="0" max="100" value="30" step="1" style="accent-color:green">
+    </div>
+
+    <div>
+        <label for="repulsionZone">Repulsion Zone Radius<br></label>
+        <input type="range" id="repulsionZone" name="repulsionZone"
+             min="0" max="50" value="10" step="1" style="accent-color:red">
+    </div>
+    <canvas id="zonesDiagramCanvas"></canvas>
+</div>
+
+<canvas id="swarmCanvas"></canvas>
+
+<script src="swarm.js"></script>
+
+</body>
+</html>
