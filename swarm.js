@@ -104,7 +104,9 @@
   }
 
   v2dp.angle = function() {
-    return Math.atan2(this.y, this.x);
+    let angle = Math.atan2(this.y, this.x);
+    angle = angle < 0 ? angle + Math.PI*2 : angle;
+    return angle;
   };
 
   v2dp.clone = function() {
@@ -115,7 +117,7 @@
 // Define particle object and methods
 //
 //
-  var Particle = function Particle(x, y, bounds, particleTrailWidth, strokeColor, id) {
+  var Particle = function Particle(x, y, bounds, particleTrailWidth, strokeColor, id, active) {
     this.p = new Vector2D(x,y); // position
     context.arc(500, 500, 20, 0, Math.PI * 2, true); // circle
     this.t = new Vector2D(x,y); // trail to
@@ -126,9 +128,9 @@
     this.r = function getRandom(min,max) {
         return Math.random() * (max - min) + min;
     }
-    this.v = new Vector2D(0,0); //new Vector2D(this.r(-1,1), this.r(-1,1)); // velocity
+    this.v = new Vector2D(1,1); //new Vector2D(this.r(-1,1), this.r(-1,1)); // velocity
     this.id = id;
-    this.active = true;
+    this.active = active;
   }, pp = Particle.prototype;
 
   pp.reset = function() {
@@ -147,7 +149,14 @@
 
   pp.repulsion = function() {
     let d_r = new Vector2D(0,0);
-    let p_r = particles.filter((element) => (this.p.dist(element.p) < r_r) && (element.id != this.id) && (element.active));
+    let p_r = particles.filter((element) =>
+        (this.p.dist(element.p) < r_r) && // particle is in repulsion zone
+        (element.id != this.id) && // particle is not the current agent
+        (element.active) && // particle is part of numAgents
+        (Math.abs(this.v.clone().mul(-1).angle() - element.p.clone().sub(this.p).angle())*180/Math.PI
+        > (parseInt(blindAngle.value)/2) )// particle is not in blind spot
+        );
+
     if (this.id == 0) { r_neighbours = p_r; }
 
     if (p_r.length > 0) {
@@ -161,7 +170,14 @@
 
   pp.attraction = function() {
     let d_a = new Vector2D(0,0);
-    let p_a = particles.filter((element) => (this.p.dist(element.p) < r_a) && (this.p.dist(element.p) > r_o) && (element.id != this.id)  && (element.active) );
+    let p_a = particles.filter((element) =>
+        (this.p.dist(element.p) < r_a) && // particle is in attraction zone
+        (this.p.dist(element.p) > r_o) &&
+        (element.id != this.id) && // particle is not the current agent
+        (element.active) && // particle is part of numAgents
+        (Math.abs(this.v.clone().mul(-1).angle() - element.p.clone().sub(this.p).angle())*180/Math.PI
+        > (parseInt(blindAngle.value)/2) )// particle is not in blind spot
+        );
     if (this.id == 0) { a_neighbours = p_a; }
 
     if (p_a.length > 0) {
@@ -175,7 +191,14 @@
 
   pp.orientation = function() {
     let d_o = new Vector2D(0,0);
-    let p_o = particles.filter((element) => (this.p.dist(element.p) < r_o) && (this.p.dist(element.p) > r_r) && (element.id != this.id) && (element.active) );
+    let p_o = particles.filter((element) =>
+        (this.p.dist(element.p) < r_o) && // particle is in orientation zone
+        (this.p.dist(element.p) > r_r) &&
+        (element.id != this.id) && // particle is not the current agent
+        (element.active) && // particle is part of numAgents
+        (Math.abs(this.v.clone().mul(-1).angle() - element.p.clone().sub(this.p).angle())*180/Math.PI
+        > (parseInt(blindAngle.value)/2) )// particle is not in blind spot
+        );
     if (this.id == 0) { o_neighbours = p_o; }
 
     if (p_o.length > 0) {
@@ -225,8 +248,8 @@
     // add noise as random velocity in a random direction
     let diff = new_direction - curr_direction;
     let turningDirection = Math.abs(diff) < Math.PI ? Math.sign(diff) : -Math.sign(diff);
-    let turningMagnitude = Math.abs(diff) < turningSpeed.value ? new_direction : curr_direction + turningDirection*turningSpeed.value;
-    let n = 0.3; // noise level in radians
+    let turningMagnitude = Math.abs(diff) < parseFloat(turningSpeed.value) ? new_direction : curr_direction + turningDirection*parseFloat(turningSpeed.value);
+    let n = 0; // noise level in radians
     // update speed direction
     this.v.x = Math.cos(turningMagnitude + this.r(-n, n));
     this.v.y = Math.sin(turningMagnitude + this.r(-n, n));
@@ -338,20 +361,30 @@ function generateParticles(amount) {
           bounds,
           3,
           generateColor(),
-          i
+          i,
+          i < parseInt(numAgents.value)
         )
     );
   }
 }
 
+function drawSector(cx, cy, radius, startAngle, endAngle, color, context) {
+    context.beginPath();
+    context.fillStyle = color;
+    context.moveTo(cx,cy);
+    context.arc(cx,cy,radius, startAngle, endAngle, false);
+    context.lineTo(cx,cy);
+    context.fill();
+}
 
 function renderDiagram(particle) {
 
     // skip rendering of diagram if we are in live mode
     if (diagramLive.checked && particle === undefined) {return false};
-    if (!diagramLive.checked) { console.log('re-draw diagram')}
     //else
-    let x, y, r, alpha, ctx_;
+    let x, y, r, alpha, ctx_, angleStart, angleEnd;
+    let angle = parseInt(blindAngle.value) * Math.PI / 180;
+
     if (particle === undefined) {
         cvs.height = 200;
         ctx_ = ctx;
@@ -360,41 +393,32 @@ function renderDiagram(particle) {
         r = ((cvs.width/2) -2) / (parseInt(attractionZone.getAttribute('max')) + parseInt(orientationZone.getAttribute('max')) + parseInt(repulsionZone.getAttribute('max')));
         alpha = 1;
         stroke_c = 'rgba(255,255,255,1)';
+        angleStart = Math.PI /2 + angle/2;
+        angleEnd = Math.PI /2 - angle/2;
+
     }
     else {
         ctx_ = context;
         x = particle.p.x;
         y = particle.p.y;
         r = 1;
-        alpha = 0.02;
+        alpha = 0.05;
         stroke_c = 'rgba(0,0,0,1)';
         ctx_.globalCompositeOperation = 'screen';
-
+        angleStart = particle.v.clone().mul(-1).angle() + angle/2;
+        angleEnd = particle.v.clone().mul(-1).angle() - angle/2;
     }
 
     color_a = 'rgba(0,0,255,' + alpha + ')';
     color_o = 'rgba(0,255,0,' + alpha + ')';
     color_r = 'rgba(255,0,0,' + alpha + ')';
-    ctx_.beginPath();
-    ctx_.strokeStyle = stroke_c;
-    ctx_.fillStyle = color_a;
-    ctx_.arc(x, y, r_a*r, 0, Math.PI * 2, true);
-    ctx_.stroke();
-    ctx_.fill()
 
-    ctx_.beginPath();
-    ctx_.strokeStyle = stroke_c;
-    ctx_.fillStyle = color_o;
-    ctx_.arc(x, y, r_o*r, 0, Math.PI * 2, true);
-    ctx_.stroke();
-    ctx_.fill()
-
-    ctx_.beginPath();
-    ctx_.strokeStyle = stroke_c;
-    ctx_.fillStyle = color_r;
-    ctx_.arc(x, y, r_r*r, 0, Math.PI * 2, true);
-    ctx_.stroke();
-    ctx_.fill()
+    // attraction
+    drawSector(x, y, r_a*r, angleStart, angleEnd, color_a, ctx_)
+    // orientation
+    drawSector(x, y, r_o*r, angleStart, angleEnd, color_o, ctx_)
+    // repulsion
+    drawSector(x, y, r_r*r, angleStart, angleEnd, color_r, ctx_)
 }
 
 // Control div event listeners
@@ -429,12 +453,17 @@ numAgents.addEventListener('change', (e) => {
 diagramLive.addEventListener('click', (e) => {
     let temp = diagramLive.checked ? cvs.height = 0 : renderDiagram();
 });
+blindAngle.addEventListener('change', (e) => {
+    renderDiagram();
+});
 
+// RENDER
 function render() {
     if (renderFlag) {
         requestAnimationFrame(render);
         renderFlag = false;
     }
+
 
     // Find group velocity
 //    for(var i = 0; i < particles.length; i += 1) {
@@ -499,11 +528,40 @@ function render() {
         context.stroke();
         context.closePath();
     }
+
+//    // DEBUG
+//    let num = 53;
+//    context.beginPath()
+//    context.fillStyle = 'rgba(255,255,255,1)';
+//    context.arc(particles[num].p.x, particles[num].p.y, 5, 0 , Math.PI*2, true);
+//    context.fill();
+//    // -v vector
+//    context.beginPath();
+//    context.moveTo(particles[0].p.x, particles[0].p.y)
+//    context.strokeStyle = 'rgba(255,0,255,1)';
+//    v_minus = particles[0].v.clone().mul(-1);
+//    context.lineTo(particles[0].p.x + 100*v_minus.x, particles[0].p.y + 100*v_minus.y)
+//    context.stroke();
+//    context.closePath();
+//    // p0 - pnum vector
+//    context.beginPath();
+//    context.moveTo(particles[0].p.x, particles[0].p.y)
+//    context.strokeStyle = 'rgba(255,255,255,1)';
+//    context.lineTo(particles[num].p.x, particles[num].p.y)
+//    context.stroke();
+//    context.closePath();
+//    if (debug) {
+//    console.log('Angle of v_minus: ', v_minus.angle()*180/Math.PI)
+//    console.log('Angle to neighbor: ', particles[num].p.clone().sub(particles[0].p).angle()*180/Math.PI)
+//    console.log('Diff: ',(v_minus.angle() - particles[num].p.clone().sub(particles[0].p).angle())*180/Math.PI)
+//    console.log('State of particle 500: ',particles[499].active)
+//    debug = false;
+//    }
     // animation frame completed
     renderFlag = true;
 }
 
-
+debug = true;
 // Start on window load
 //
 //
@@ -548,7 +606,7 @@ window.addEventListener('load', function() {
       attractionZone.setAttribute('max', 100);
       orientationZone.setAttribute('max', 100);
       repulsionZone.setAttribute('max',30);
-
+      diagramLive.checked = true;
 
       turningSpeed.value = 0.05;
       attractionZone.value = 50;
@@ -556,8 +614,11 @@ window.addEventListener('load', function() {
       repulsionZone.value = 5;
       // generate a few particles
       generateParticles(settings.particleNum)
+
       // fill out zone diagram
       renderDiagram()
       // kick off animation
       render()
+
+
 });
