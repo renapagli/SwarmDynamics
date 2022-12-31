@@ -126,7 +126,7 @@
     this.r = function getRandom(min,max) {
         return Math.random() * (max - min) + min;
     }
-    this.v = new Vector2D(this.r(-1,1), this.r(-1,1)); // velocity
+    this.v = new Vector2D(0,0); //new Vector2D(this.r(-1,1), this.r(-1,1)); // velocity
     this.id = id;
     this.active = true;
   }, pp = Particle.prototype;
@@ -147,7 +147,9 @@
 
   pp.repulsion = function() {
     let d_r = new Vector2D(0,0);
-    let p_r = particles.filter((element) => (this.p.dist(element.p) < r_r) && (element.id != this.id));
+    let p_r = particles.filter((element) => (this.p.dist(element.p) < r_r) && (element.id != this.id) && (element.active));
+    if (this.id == 0) { r_neighbours = p_r; }
+
     if (p_r.length > 0) {
         for (const particle of p_r) {
           d_r.add(this.p.clone().sub(particle.p).div(this.p.dist(particle.p)));
@@ -160,25 +162,29 @@
   pp.attraction = function() {
     let d_a = new Vector2D(0,0);
     let p_a = particles.filter((element) => (this.p.dist(element.p) < r_a) && (this.p.dist(element.p) > r_o) && (element.id != this.id)  && (element.active) );
+    if (this.id == 0) { a_neighbours = p_a; }
+
     if (p_a.length > 0) {
         for (const particle of p_a) {
           d_a.add(particle.p.clone().sub(this.p).div(particle.p.dist(this.p)));
         }
         return d_a;
     }
-    else { return false;}
+    else {return false;}
   }
 
   pp.orientation = function() {
     let d_o = new Vector2D(0,0);
     let p_o = particles.filter((element) => (this.p.dist(element.p) < r_o) && (this.p.dist(element.p) > r_r) && (element.id != this.id) && (element.active) );
+    if (this.id == 0) { o_neighbours = p_o; }
+
     if (p_o.length > 0) {
         for (const particle of p_o) {
           d_o.add(particle.v.clone().sub(this.v).div(particle.v.dist(this.v)));
         }
         return d_o;
     }
-    else { return false;}
+    else {return false;}
   }
 
   pp.step = function() {
@@ -188,6 +194,12 @@
 
     let new_direction = this.v.angle();
     let curr_direction = this.v.angle();
+    // call all functions for particle 0 to ensure neighbours are updated
+    if (this.id == 0 ) {
+        this.repulsion();
+        this.attraction();
+        this.orientation();
+    }
 
     // if there is any other particle in the zone of rejection, then move away
     let d_r = this.repulsion();
@@ -254,12 +266,8 @@
 
   // plot the line, but do not stroke yet.
   pp.render = function() {
-//    context.arc(this.p.x, this.p.y, 2, 0, Math.PI * 2, true); // circle
-//    context.fillStyle = this.color;
-//    context.fill();
-//    context.beginPath();
+//    context.strokeStyle = this.color;
     context.lineWidth = this.particleTrailWidth;
-    context.fillStyle = this.color;
     context.moveTo(this.p.x, this.p.y);
     context.lineTo(this.t.x, this.t.y);
   };
@@ -322,12 +330,13 @@ function generateColor() {
 }
 
 function generateParticles(amount) {
+  // place particles along Fermat's Spiral
   for (let i = 0; i < amount; i++) {
     particles.push(new Particle(
-          innerWidth/2 + 400*Math.cos(Math.PI * 2 * i/amount),
-          innerHeight/2 + 400*Math.sin(Math.PI * 2 * i/amount),
+          innerWidth/2 + i * 1 * Math.cos(i),
+          innerHeight/2 + i * 1 * Math.sin(i),
           bounds,
-          1,
+          3,
           generateColor(),
           i
         )
@@ -335,68 +344,57 @@ function generateParticles(amount) {
   }
 }
 
-function render() {
-    requestAnimationFrame(render);
 
-    // Find group velocity
-//    for(var i = 0; i < particles.length; i += 1) {
-//      particles_theta += particles[i].v.angle();
-//    }
-//    particles_theta /= particles.length;
+function renderDiagram(particle) {
 
-    context.beginPath();
-    // render each particle and trail
-    for(var i = 0; i < numAgents.value; i += 1) {
-      particles[i].step(), particles[i].render();
+    // skip rendering of diagram if we are in live mode
+    if (diagramLive.checked && particle === undefined) {return false};
+    if (!diagramLive.checked) { console.log('re-draw diagram')}
+    //else
+    let x, y, r, alpha, ctx_;
+    if (particle === undefined) {
+        cvs.height = 200;
+        ctx_ = ctx;
+        x = cvs.width/2;
+        y = cvs.height/2;
+        r = ((cvs.width/2) -2) / (parseInt(attractionZone.getAttribute('max')) + parseInt(orientationZone.getAttribute('max')) + parseInt(repulsionZone.getAttribute('max')));
+        alpha = 1;
+        stroke_c = 'rgba(255,255,255,1)';
+    }
+    else {
+        ctx_ = context;
+        x = particle.p.x;
+        y = particle.p.y;
+        r = 1;
+        alpha = 0.02;
+        stroke_c = 'rgba(0,0,0,1)';
+        ctx_.globalCompositeOperation = 'screen';
+
     }
 
-    context.globalCompositeOperation = 'source-over';
-    if(settings.fadeOverlay) {
-      context.fillStyle = 'rgba(0, 0, 0, .085)';
-    } else {
-      context.fillStyle = 'rgba(0, 0, 0, 1)';
-    }
-    context.fillRect(0, 0, width, height);
+    color_a = 'rgba(0,0,255,' + alpha + ')';
+    color_o = 'rgba(0,255,0,' + alpha + ')';
+    color_r = 'rgba(255,0,0,' + alpha + ')';
+    ctx_.beginPath();
+    ctx_.strokeStyle = stroke_c;
+    ctx_.fillStyle = color_a;
+    ctx_.arc(x, y, r_a*r, 0, Math.PI * 2, true);
+    ctx_.stroke();
+    ctx_.fill()
 
-    context.globalCompositeOperation = 'lighter';
-    if(settings.rotateColor) {
-      context.strokeStyle = 'hsla(' + hue + ', 75%, 50%, .55)';
-    } else {
-      context.strokeStyle = settings.staticColorString;
-    }
-    context.stroke();
-    context.closePath();
+    ctx_.beginPath();
+    ctx_.strokeStyle = stroke_c;
+    ctx_.fillStyle = color_o;
+    ctx_.arc(x, y, r_o*r, 0, Math.PI * 2, true);
+    ctx_.stroke();
+    ctx_.fill()
 
-    hue = ((hue + .5) % 360);
-}
-
-function renderDiagram() {
-    let cvs = document.getElementById("zonesDiagramCanvas");
-    let ctx = cvs.getContext("2d");
-    let r = 98 / (parseInt(attractionZone.getAttribute('max')) + parseInt(orientationZone.getAttribute('max')) + parseInt(repulsionZone.getAttribute('max')));
-    cvs.width = 200;
-    cvs.height = 200;
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,255,255,1)';
-    ctx.fillStyle = 'rgba(0,0,255,1)';
-    ctx.arc(cvs.width/2, cvs.height/2, r_a*r, 0, Math.PI * 2, true);
-    ctx.stroke();
-    ctx.fill()
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,255,255,1)';
-    ctx.fillStyle = 'rgba(0,255,0,1)';
-    ctx.arc(cvs.width/2, cvs.height/2, r_o*r, 0, Math.PI * 2, true);
-    ctx.stroke();
-    ctx.fill()
-
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,255,255,1)';
-    ctx.fillStyle = 'rgba(255,0,0,1)';
-    ctx.arc(cvs.width/2, cvs.height/2, r_r*r, 0, Math.PI * 2, true);
-    ctx.stroke();
-    ctx.fill()
+    ctx_.beginPath();
+    ctx_.strokeStyle = stroke_c;
+    ctx_.fillStyle = color_r;
+    ctx_.arc(x, y, r_r*r, 0, Math.PI * 2, true);
+    ctx_.stroke();
+    ctx_.fill()
 }
 
 // Control div event listeners
@@ -422,19 +420,112 @@ repulsionZone.addEventListener('change', (e) => {
 turningSpeed.addEventListener('change', (e) => {
     rotateSpeed = parseInt(turningSpeed.value);
 });
+numAgents.addEventListener('change', (e) => {
+    for (const p of particles) {
+      if (p.id < parseInt(numAgents.value)) {p.active = true}
+      else {p.active = false}
+    }
+});
+diagramLive.addEventListener('click', (e) => {
+    let temp = diagramLive.checked ? cvs.height = 0 : renderDiagram();
+});
+
+function render() {
+    if (renderFlag) {
+        requestAnimationFrame(render);
+        renderFlag = false;
+    }
+
+    // Find group velocity
+//    for(var i = 0; i < particles.length; i += 1) {
+//      particles_theta += particles[i].v.angle();
+//    }
+//    particles_theta /= particles.length;
+
+    // draw background
+    context.globalCompositeOperation = 'source-over';
+    if(settings.fadeOverlay) {
+      context.fillStyle = 'rgba(0, 0, 0, .3)';
+    } else {
+      context.fillStyle = 'rgba(0, 0, 0, 1)';
+    }
+    context.fillRect(0, 0, width, height);
+
+    // draw zones circles around particle 0
+    if (diagramLive.checked) {renderDiagram(particles[0]);}
+
+    context.globalCompositeOperation = 'lighter';
+    // render each particle and trail
+    context.beginPath();
+    for(var i = 0; i < numAgents.value; i += 1) {
+      particles[i].step(), particles[i].render();
+    }
+    if(settings.rotateColor) {
+      context.strokeStyle = 'hsla(' + hue + ', 75%, 50%, .55)';
+    } else {
+      context.strokeStyle = settings.staticColorString;
+    }
+    context.stroke();
+    context.closePath();
+
+    hue = ((hue + .5) % 360);
+
+    if (diagramLive.checked) {
+        // draw neighbours
+        context.beginPath();
+        context.globalCompositeOperation = 'source-over';
+        context.strokeStyle = 'rgba(255,0,0,1)'; // repulsion
+        for(var i = 0; i < r_neighbours.length; i += 1) {
+            r_neighbours[i].render();
+        }
+        context.stroke();
+        context.closePath();
+
+        context.beginPath();
+        context.globalCompositeOperation = 'source-over';
+        context.strokeStyle = 'rgba(0,255,0,1)'; // orientation
+        for(var i = 0; i < o_neighbours.length; i += 1) {
+            o_neighbours[i].render();
+        }
+        context.stroke();
+        context.closePath();
+
+        context.beginPath();
+        context.globalCompositeOperation = 'source-over';
+        context.strokeStyle = 'rgba(0,0,255,1)'; // attraction
+        for(var i = 0; i < a_neighbours.length; i += 1) {
+            a_neighbours[i].render();
+        }
+        context.stroke();
+        context.closePath();
+    }
+    // animation frame completed
+    renderFlag = true;
+}
+
 
 // Start on window load
 //
 //
 canvas = document.getElementById("swarmCanvas");
 context = canvas.getContext("2d");
+cvs = document.getElementById("zonesDiagramCanvas");
+ctx = cvs.getContext("2d");
+cvs.width = 200;
+cvs.height = 200;
 particles = [];
+// initialize arrays to hold neighbors of particle 0
+r_neighbours = [];
+o_neighbours = [];
+a_neighbours = [];
+// group direction
 particles_theta = 0;
 bounds = new Vector2D(0, 0),
 canvas.width = bounds.x = window.innerWidth,
 canvas.height = bounds.y = window.innerHeight,
 monitor = new MouseMonitor(canvas),
 hue = 0,
+renderFlag = true;
 
 // 3 zones model parameters
 r_r = repulsionZone.value, // area of repulsion radius
@@ -444,9 +535,9 @@ r_a = attractionZone.value; // area of attraction radius
 settings = {
     particleNum: parseInt(numAgents.getAttribute('max')),
     fadeOverlay: true,
-    rotateColor: true,
+    rotateColor: false,
     staticColor: {r: 0, g: 75, b: 50},
-    staticColorString: 'rgba(0, 75, 50, 0.55)'
+    staticColorString: 'rgba(250, 149, 0, 1)'
 };
 width = canvas.width;
 height = canvas.height;
